@@ -228,8 +228,9 @@
                 if(simState.phase === 'TURN_ACTION') {
                     nextTurnBtn.classList.remove('hidden');
                 } else if (simState.phase === 'MID_TURN_ACTION') {
-                    skipMidTurnBtn.classList.remove('hidden'); changeStatsBtn.classList.remove('hidden'); midTurnControls.classList.remove('hidden');
+                    skipMidTurnBtn.classList.remove('hidden'); changeStatsBtn.classList.remove('hidden'); 
                     if (!simState.midTurnAbilityUsed) {
+                        midTurnControls.classList.remove('hidden');
                         midTurnBtn.classList.remove('hidden');
                     }
                     const abilitiesContainer = document.getElementById('mid-turn-abilities-container');
@@ -254,7 +255,7 @@
             container.innerHTML = '';
             const createEditCard = (shipGroup, team, index) => {
                 const card = document.createElement('div'); card.className = 'bg-gray-700 p-4 rounded-lg'; card.dataset.team = team; card.dataset.index = index;
-                card.innerHTML = ` <h3 class="text-lg font-semibold mb-2 ${team === 'A' ? 'text-green-400' : 'text-red-400'}">${shipGroup.name}</h3> <div class="grid grid-cols-2 sm:grid-cols-4 gap-4"> <input type="number" placeholder="Ship Count" value="${shipGroup.currentCount}" class="count bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="HP (per ship)" value="${shipGroup.individualHp}" class="hp bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Firepower" value="${shipGroup.fp}" class="fp bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="# of Rolls" value="${shipGroup.numRolls}" class="rolls bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Mitigation %" value="${shipGroup.damageMitigation * 100}" class="mitigation bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Evasion %" value="${shipGroup.evasion * 100}" class="evasion bg-gray-600 border border-gray-500 rounded p-2 text-white"> </div> `;
+                card.innerHTML = ` <h3 class="text-lg font-semibold mb-2 ${team === 'A' ? 'text-green-400' : 'text-red-400'}">${shipGroup.name}</h3> <div class="grid grid-cols-2 sm:grid-cols-4 gap-4"> <input type="number" placeholder="Ship Count" value="${shipGroup.currentCount}" class="count bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="HP (per ship)" value="${shipGroup.individualHp}" class="hp bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Firepower" value="${shipGroup.fp}" class="fp bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="# of Rolls" value="${shipGroup.numRolls}" class="rolls bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Roll Multiplier" value="${shipGroup.rollMultiplier}" class="roll-multiplier bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Mitigation %" value="${shipGroup.damageMitigation * 100}" class="mitigation bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Evasion %" value="${shipGroup.evasion * 100}" class="evasion bg-gray-600 border border-gray-500 rounded p-2 text-white"> </div> `;
                 container.appendChild(card);
             };
             simState.teamA.forEach((sg, i) => createEditCard(sg, 'A', i));
@@ -271,11 +272,11 @@
                 if(shipGroup) {
                     const newCount = parseInt(card.querySelector('.count').value) || 0;
                     shipGroup.currentCount = newCount; shipGroup.maxCount = newCount; 
-                    // Recalculate dodge pool based on new count and existing per-ship dodges
                     shipGroup.dodgePool = newCount * shipGroup.guaranteedDodgesPerShip;
                     shipGroup.individualHp = parseInt(card.querySelector('.hp').value) || 0;
                     shipGroup.fp = parseInt(card.querySelector('.fp').value) || 0;
                     shipGroup.numRolls = parseInt(card.querySelector('.rolls').value) || 0;
+                    shipGroup.rollMultiplier = parseInt(card.querySelector('.roll-multiplier').value) || 1;
                     shipGroup.damageMitigation = (parseInt(card.querySelector('.mitigation').value) || 0) / 100;
                     shipGroup.evasion = (parseInt(card.querySelector('.evasion').value) || 0) / 100;
                 }
