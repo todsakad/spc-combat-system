@@ -23,7 +23,7 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #718096;
         }
-        #next-turn-button.hidden {
+        .control-button.hidden, #mid-turn-controls.hidden, .modal.hidden {
             display: none;
         }
     </style>
@@ -35,8 +35,8 @@
 
     <div class="max-w-7xl mx-auto">
         <header class="text-center mb-8">
-            <h1 class="text-3xl sm:text-4xl font-bold text-cyan-400">Fleet Combat Calculator</h1>
-            <p class="text-gray-400 mt-2">this calculates stuff for the gms because the system is so shit we cannot afford to do it by hand</p>
+            <h1 class="text-3xl sm:text-4xl font-bold text-cyan-400">SPC Combat Calculator</h1>
+            <p class="text-gray-400 mt-2">this calculates stuff for the gms because the system is so shit its too tiresome to do it by hand</p>
         </header>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
@@ -62,13 +62,36 @@
                 </button>
             </div>
         </div>
+        
+        <!-- Mid-Turn Ability Controls -->
+        <div id="mid-turn-controls" class="hidden bg-gray-800 p-4 rounded-xl shadow-lg border border-gray-700 mb-8 space-y-4">
+            <div id="mid-turn-abilities-container" class="space-y-3">
+                <!-- Mid-turn ability rows will be injected here -->
+            </div>
+            <button onclick="addMidTurnAbilityRow()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
+                + Add Ability
+            </button>
+        </div>
 
-        <div class="text-center mb-8 space-x-4">
-            <button id="start-battle-button" class="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition duration-300 shadow-lg">
+
+        <div class="text-center mb-8 space-x-2 sm:space-x-4 flex flex-wrap justify-center">
+            <button id="start-battle-button" class="control-button bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-6 sm:px-8 rounded-lg text-lg transition duration-300 shadow-lg">
                 Start Battle
             </button>
-            <button id="next-turn-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition duration-300 shadow-lg hidden">
+            <button id="next-turn-button" class="control-button bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 sm:px-8 rounded-lg text-lg transition duration-300 shadow-lg hidden">
                 Next Turn
+            </button>
+            <button id="mid-turn-ability-button" class="control-button bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 sm:px-8 rounded-lg text-lg transition duration-300 shadow-lg hidden">
+                Use Mid-Turn Abilities
+            </button>
+             <button id="skip-mid-turn-button" class="control-button bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 sm:px-8 rounded-lg text-lg transition duration-300 shadow-lg hidden">
+                Next Turn
+            </button>
+            <button id="change-stats-button" class="control-button bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-6 sm:px-8 rounded-lg text-lg transition duration-300 shadow-lg hidden">
+                Change Stats
+            </button>
+            <button id="reset-battle-button" class="control-button bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 sm:px-8 rounded-lg text-lg transition duration-300 shadow-lg hidden">
+                Reset Battle
             </button>
         </div>
 
@@ -79,264 +102,209 @@
         </div>
     </div>
 
+    <!-- Modals -->
+    <div id="edit-stats-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-xl shadow-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-gray-700">
+            <div class="p-6">
+                <h2 class="text-2xl font-semibold mb-4 text-yellow-400">Edit Ship Stats</h2>
+                <div id="edit-stats-container" class="space-y-6"></div>
+            </div>
+            <div class="bg-gray-900 p-4 sticky bottom-0 flex justify-end space-x-4 rounded-b-xl">
+                <button onclick="closeChangeStatsModal()" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-lg transition">Cancel</button>
+                <button onclick="saveShipStats()" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-6 rounded-lg transition">Save Changes</button>
+            </div>
+        </div>
+    </div>
+    <div id="reset-confirm-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-xl shadow-lg w-full max-w-md border border-gray-700 text-center p-6">
+            <h2 class="text-2xl font-semibold mb-4 text-red-400">Are you sure?</h2>
+            <p class="text-gray-300 mb-6">This will reset the battle to its starting state. Your fleet setups will remain.</p>
+            <div class="flex justify-center space-x-4">
+                 <button onclick="closeResetModal()" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-lg transition">Cancel</button>
+                <button onclick="resetBattle()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition">Yes, Reset</button>
+            </div>
+        </div>
+    </div>
+
+
     <script>
-        // --- Global State for Turn-Based Simulation ---
-        let simState = {
-            teamA: [],
-            teamB: [],
-            turn: 1,
-            battleInProgress: false,
-            log: "",
-        };
+        // --- Global State ---
+        let simState = { teamA: [], teamB: [], turn: 1, battleInProgress: false, log: "", phase: 'SETUP', midTurnAbilityUsed: false };
 
         // --- Core Combat Logic ---
-
         class ShipGroup {
-            constructor(name, hp, count, fp, damageMitigation, evasion, numRolls, guaranteedDodges, specialDamage, rollAddon, rollMultiplier) {
-                this.name = name || 'Unnamed Group';
-                this.individualHp = hp;
-                this.maxCount = count;
-                this.currentCount = count;
-                this.fp = fp; // Firepower
-                this.damageMitigation = damageMitigation; // Percentage (0.0 to 1.0)
-                this.evasion = evasion; // Percentage (0.0 to 1.0)
-                this.numRolls = numRolls;
-                this.dodgePool = count * guaranteedDodges; // Total pool of dodges for the group
-                this.specialDamage = specialDamage;
-                this.rollAddon = rollAddon;
-                this.rollMultiplier = rollMultiplier; // Direct multiplier (e.g., 1, 2, 3)
-                this.damageOnCurrentShip = 0;
+             constructor(name, hp, count, fp, damageMitigation, evasion, numRolls, guaranteedDodges, 
+                        specialDamage, shipsHit, isUndodgeable, damageSpillover, 
+                        rollAddon, rollMultiplier) {
+                this.name = name || 'Unnamed Group'; this.individualHp = hp; this.maxCount = count; this.currentCount = count; this.fp = fp; this.damageMitigation = damageMitigation; this.evasion = evasion; this.numRolls = numRolls; this.guaranteedDodgesPerShip = guaranteedDodges; this.dodgePool = count * guaranteedDodges; this.specialDamage = specialDamage; this.shipsHit = shipsHit; this.isUndodgeable = isUndodgeable; this.damageSpillover = damageSpillover; this.rollAddon = rollAddon; this.rollMultiplier = rollMultiplier; this.damageOnCurrentShip = 0;
             }
-
-            isDestroyed() {
-                return this.currentCount <= 0;
-            }
-
+            isDestroyed() { return this.currentCount <= 0; }
             takeDamage(totalRawDamage) {
-                const mitigatedDamage = totalRawDamage * (1 - this.damageMitigation);
-                const finalDamage = Math.ceil(mitigatedDamage > 0 ? mitigatedDamage : 0);
-                this.damageOnCurrentShip += finalDamage;
-                let shipsLost = 0;
-                if (this.individualHp > 0) {
-                    shipsLost = Math.floor(this.damageOnCurrentShip / this.individualHp);
-                    if (shipsLost > 0) {
-                        this.currentCount -= shipsLost;
-                        this.damageOnCurrentShip %= this.individualHp;
-                    }
-                }
-                if (this.currentCount < 0) this.currentCount = 0;
-                return { finalDamage, shipsLost };
+                const mitigatedDamage = totalRawDamage * (1 - this.damageMitigation); const finalDamage = Math.ceil(mitigatedDamage > 0 ? mitigatedDamage : 0); this.damageOnCurrentShip += finalDamage; let shipsLost = 0; if (this.individualHp > 0) { shipsLost = Math.floor(this.damageOnCurrentShip / this.individualHp); if (shipsLost > 0) { this.currentCount -= shipsLost; this.damageOnCurrentShip %= this.individualHp; } } if (this.currentCount < 0) this.currentCount = 0; return { finalDamage, shipsLost };
             }
-
-            toString() {
-                return `${this.name} (${this.currentCount}/${this.maxCount} ships)`;
-            }
+            toString() { return `${this.name} (${this.currentCount}/${this.maxCount} ships)`; }
         }
         
         function startBattle() {
-            const teamA_groups = [];
-            const teamB_groups = [];
+            const teamA_groups = [], teamB_groups = [];
             document.querySelectorAll('.ship-group-card').forEach(card => {
                 const team = card.dataset.team;
-                const name = card.querySelector('.name').value;
-                const count = parseInt(card.querySelector('.count').value) || 0;
-                const hp = parseInt(card.querySelector('.hp').value) || 0;
-                const fp = parseInt(card.querySelector('.fp').value) || 0;
-                const mitigation = (parseInt(card.querySelector('.mitigation').value) || 0) / 100;
-                const evasion = (parseInt(card.querySelector('.evasion').value) || 0) / 100;
-                const rolls = parseInt(card.querySelector('.rolls').value) || 0;
-                const dodges = parseInt(card.querySelector('.dodges').value) || 0;
-                const specialDamage = parseInt(card.querySelector('.special-damage').value) || 0;
-                const rollAddon = parseInt(card.querySelector('.roll-addon').value) || 0;
-                const rollMultiplier = parseInt(card.querySelector('.roll-multiplier').value) || 1;
-
-                const shipGroup = new ShipGroup(name, hp, count, fp, mitigation, evasion, rolls, dodges, specialDamage, rollAddon, rollMultiplier);
-                if (team === 'A') teamA_groups.push(shipGroup);
-                else teamB_groups.push(shipGroup);
+                const name = card.querySelector('.name').value; const count = parseInt(card.querySelector('.count').value) || 0; const hp = parseInt(card.querySelector('.hp').value) || 0; const fp = parseInt(card.querySelector('.fp').value) || 0; const rolls = parseInt(card.querySelector('.rolls').value) || 0; const rollAddon = parseInt(card.querySelector('.roll-addon').value) || 0; const rollMultiplier = parseInt(card.querySelector('.roll-multiplier').value) || 1; const mitigation = (parseInt(card.querySelector('.mitigation').value) || 0) / 100; const evasion = (parseInt(card.querySelector('.evasion').value) || 0) / 100; const dodges = parseInt(card.querySelector('.dodges').value) || 0; const specialDamage = parseInt(card.querySelector('.special-damage').value) || 0; const shipsHit = parseInt(card.querySelector('.ships-hit').value) || 1; const isUndodgeable = card.querySelector('.undodgeable').value === 'Undodgeable: Yes'; const damageSpillover = card.querySelector('.spillover').value === 'Spillover: Yes';
+                const shipGroup = new ShipGroup(name, hp, count, fp, mitigation, evasion, rolls, dodges, specialDamage, shipsHit, isUndodgeable, damageSpillover, rollAddon, rollMultiplier);
+                if (team === 'A') teamA_groups.push(shipGroup); else teamB_groups.push(shipGroup);
             });
-
-            if (teamA_groups.length === 0 || teamB_groups.length === 0) {
-                document.getElementById('battle-log').textContent = "Error: Both teams must have at least one ship group.";
-                return;
-            }
-
-            simState = {
-                teamA: teamA_groups,
-                teamB: teamB_groups,
-                turn: 1,
-                battleInProgress: true,
-                log: "",
-            };
-
-            simState.log = "--- Battle Start ---\n";
-            simState.log += `Team A: ${simState.teamA.map(f => f.toString()).join(", ")}\n`;
-            simState.log += `Team B: ${simState.teamB.map(f => f.toString()).join(", ")}\n`;
-            
-            // --- Pre-Battle Special Abilities Phase ---
-            simState.log += "\n--- Pre-Battle Special Abilities ---\n";
-            let specialAbilityUsed = false;
-            const fireSpecials = (attackers, defenders) => {
-                attackers.forEach(attacker => {
-                    if (attacker.specialDamage > 0 && !attacker.isDestroyed()) {
-                        let currentTargets = defenders.filter(f => !f.isDestroyed());
-                        if (currentTargets.length > 0) {
-                            const target = currentTargets[Math.floor(Math.random() * currentTargets.length)];
-                            const rawDamage = attacker.specialDamage;
-                            const { finalDamage, shipsLost } = target.takeDamage(rawDamage);
-                            simState.log += `[Special] ${attacker.name} hits ${target.name} for ${finalDamage} damage (raw: ${rawDamage}).\n`;
-                            if (shipsLost > 0) simState.log += `  -> ${target.name} lost ${shipsLost} ship(s)!\n`;
-                            specialAbilityUsed = true;
-                        }
-                    }
-                });
-            };
-            fireSpecials(simState.teamA, simState.teamB);
-            fireSpecials(simState.teamB, simState.teamA);
-            if (!specialAbilityUsed) simState.log += "No special abilities used.\n";
+            if (teamA_groups.length === 0 || teamB_groups.length === 0) { document.getElementById('battle-log').textContent = "Error: Both teams must have at least one ship group."; return; }
+            simState = { teamA: teamA_groups, teamB: teamB_groups, turn: 1, battleInProgress: true, log: "", phase: 'TURN_ACTION', midTurnAbilityUsed: false };
+            simState.log = "--- Battle Start ---\n"; simState.log += `Team A: ${simState.teamA.map(f => f.toString()).join(", ")}\n`; simState.log += `Team B: ${simState.teamB.map(f => f.toString()).join(", ")}\n`; simState.log += "\n--- Pre-Battle Special Abilities ---\n";
+            const teamAFired = firePreBattleAbilities(simState.teamA, simState.teamB, '[Pre-Battle]'); const teamBFired = firePreBattleAbilities(simState.teamB, simState.teamA, '[Pre-Battle]'); if (!teamAFired && !teamBFired) simState.log += "No special abilities used.\n";
             simState.log += "-------------------------------------\n";
-            
-            updateUI();
-            checkBattleEnd();
+            updateUI(); checkBattleEnd();
         }
 
         function runNextTurn() {
-            if (!simState.battleInProgress) return;
-
-            simState.log += `\n--- Turn ${simState.turn} ---\n`;
-            
-            simState.teamA.forEach(group => group.damageThisTurn = 0);
-            simState.teamB.forEach(group => group.damageThisTurn = 0);
-
+            if (!simState.battleInProgress || simState.phase !== 'TURN_ACTION') return; simState.log += `\n--- Turn ${simState.turn} Standard Combat ---\n`; simState.teamA.forEach(group => group.damageThisTurn = 0); simState.teamB.forEach(group => group.damageThisTurn = 0);
             const calculateAttacks = (attackers, defenders, teamName) => {
                 simState.log += `\n${teamName} is calculating attacks:\n`;
-                attackers.forEach(attackerGroup => {
-                    if (attackerGroup.isDestroyed()) return;
-                    for (let ship = 0; ship < attackerGroup.currentCount; ship++) {
-                        for (let roll = 0; roll < attackerGroup.numRolls; roll++) {
-                            let currentTargets = defenders.filter(f => !f.isDestroyed());
-                            if (currentTargets.length === 0) continue;
-                            const target = currentTargets[Math.floor(Math.random() * currentTargets.length)];
-                            if (target.dodgePool > 0) {
-                                target.dodgePool--;
-                                simState.log += `  ${attackerGroup.name}'s attack on ${target.name} is negated by a guaranteed dodge. (${target.dodgePool} remaining in pool)\n`;
-                                continue;
-                            }
-                            if (Math.random() < target.evasion) {
-                                simState.log += `  ${attackerGroup.name}'s attack on ${target.name} was evaded!\n`;
-                                continue;
-                            }
-                            const minRoll = 5;
-                            // New damage calculation
-                            let initialRoll = (attackerGroup.fp < minRoll) ? attackerGroup.fp : Math.floor(Math.random() * (attackerGroup.fp - minRoll + 1)) + minRoll;
-                            let rollWithAddon = initialRoll + attackerGroup.rollAddon;
-                            let rawDamage = Math.ceil(rollWithAddon * attackerGroup.rollMultiplier);
-                            if (rawDamage < 0) rawDamage = 0; // Prevent negative damage
-
-                            target.damageThisTurn += rawDamage;
-                            simState.log += `  ${attackerGroup.name} targets ${target.name} for ${rawDamage} raw damage.\n`;
-                        }
-                    }
-                });
+                attackers.forEach(attackerGroup => { if (attackerGroup.isDestroyed()) return; for (let ship = 0; ship < attackerGroup.currentCount; ship++) { for (let roll = 0; roll < attackerGroup.numRolls; roll++) { let currentTargets = defenders.filter(f => !f.isDestroyed()); if (currentTargets.length === 0) continue; const target = currentTargets[Math.floor(Math.random() * currentTargets.length)]; if (target.dodgePool > 0) { target.dodgePool--; simState.log += `  ${attackerGroup.name}'s attack on ${target.name} is negated by a guaranteed dodge. (${target.dodgePool} remaining in pool)\n`; continue; } if (Math.random() < target.evasion) { simState.log += `  ${attackerGroup.name}'s attack on ${target.name} was evaded!\n`; continue; } const minRoll = 5; let initialRoll = (attackerGroup.fp < minRoll) ? attackerGroup.fp : Math.floor(Math.random() * (attackerGroup.fp - minRoll + 1)) + minRoll; let rollWithAddon = initialRoll + attackerGroup.rollAddon; let rawDamage = Math.ceil(rollWithAddon * attackerGroup.rollMultiplier); if (rawDamage < 0) rawDamage = 0; target.damageThisTurn += rawDamage; simState.log += `  ${attackerGroup.name} targets ${target.name} for ${rawDamage} raw damage.\n`; } } });
             };
-            
-            calculateAttacks(simState.teamA, simState.teamB, 'Team A');
-            calculateAttacks(simState.teamB, simState.teamA, 'Team B');
+            calculateAttacks(simState.teamA, simState.teamB, 'Team A'); calculateAttacks(simState.teamB, simState.teamA, 'Team B');
+            simState.log += "\n--- Damage Resolution ---\n"; let damageWasDealtThisTurn = false; const applyDamage = (team) => { team.forEach(group => { if (group.damageThisTurn > 0) { damageWasDealtThisTurn = true; const { finalDamage, shipsLost } = group.takeDamage(group.damageThisTurn); simState.log += `${group.name} takes a total of ${finalDamage} damage (from ${group.damageThisTurn} raw damage).\n`; if (shipsLost > 0) simState.log += `  -> ${group.name} lost ${shipsLost} ship(s)!\n`; } }); };
+            applyDamage(simState.teamA); applyDamage(simState.teamB); if (!damageWasDealtThisTurn) simState.log += "No damage was dealt this turn.\n";
+            simState.log += "\nEnd of Standard Combat:\n"; simState.log += `Team A: ${simState.teamA.map(f => f.toString()).join(", ")}\n`; simState.log += `Team B: ${simState.teamB.map(f => f.toString()).join(", ")}\n`;
+            simState.phase = 'MID_TURN_ACTION'; simState.midTurnAbilityUsed = false; updateUI(); checkBattleEnd();
+        }
 
-            simState.log += "\n--- Damage Resolution ---\n";
-            let damageWasDealtThisTurn = false;
-            const applyDamage = (team) => {
-                team.forEach(group => {
-                    if (group.damageThisTurn > 0) {
-                        damageWasDealtThisTurn = true;
-                        const { finalDamage, shipsLost } = group.takeDamage(group.damageThisTurn);
-                        simState.log += `${group.name} takes a total of ${finalDamage} damage (from ${group.damageThisTurn} raw damage).\n`;
-                        if (shipsLost > 0) simState.log += `  -> ${group.name} lost ${shipsLost} ship(s)!\n`;
-                    }
-                });
-            };
-            applyDamage(simState.teamA);
-            applyDamage(simState.teamB);
-            if (!damageWasDealtThisTurn) simState.log += "No damage was dealt this turn.\n";
-
-            simState.log += "\nEnd of Turn Status:\n";
-            simState.log += `Team A: ${simState.teamA.map(f => f.toString()).join(", ")}\n`;
-            simState.log += `Team B: ${simState.teamB.map(f => f.toString()).join(", ")}\n`;
+        function useMidTurnAbilities() {
+            if (!simState.battleInProgress || simState.phase !== 'MID_TURN_ACTION') return;
+            simState.log += `\n--- Turn ${simState.turn} Mid-Turn Abilities ---\n`;
+            const abilityRows = document.querySelectorAll('#mid-turn-abilities-container .ability-row');
+            if (abilityRows.length === 0) { simState.log += "No mid-turn abilities were defined.\n"; }
             
-            simState.turn++;
+            abilityRows.forEach((row, index) => {
+                const attackingTeam = row.querySelector('.mid-turn-attacker').value;
+                const damage = parseInt(row.querySelector('.mid-turn-damage-input').value) || 0;
+                const shipsHit = parseInt(row.querySelector('.mid-turn-ships-hit-input').value) || 1;
+                const isUndodgeable = row.querySelector('.mid-turn-undodgeable-input').value === 'Undodgeable: Yes';
+                const damageSpillover = row.querySelector('.mid-turn-spillover-input').value === 'Spillover: Yes';
+                if (damage <= 0) { simState.log += `Ability #${index + 1} has no damage and was skipped.\n`; return; }
+                const defenders = (attackingTeam === 'A') ? simState.teamB : simState.teamA;
+                let availableTargets = defenders.filter(f => !f.isDestroyed());
+                if (availableTargets.length > 0) {
+                    const targetFleet = availableTargets[Math.floor(Math.random() * availableTargets.length)];
+                    simState.log += `\n[Mid-Turn Ability #${index+1}] Team ${attackingTeam} targets ${targetFleet.name}!\n`;
+                    let successfulHits = 0; const numHits = Math.min(shipsHit, targetFleet.currentCount + 1);
+                    for (let i = 0; i < numHits; i++) { let hitSuccess = true; if (!isUndodgeable) { if (targetFleet.dodgePool > 0) { targetFleet.dodgePool--; simState.log += `  -> A hit was negated by a guaranteed dodge! (${targetFleet.dodgePool} remaining in pool)\n`; hitSuccess = false; } else if (Math.random() < targetFleet.evasion) { simState.log += `  -> A hit was evaded!\n`; hitSuccess = false; } } if(hitSuccess) successfulHits++; }
+                    if (successfulHits > 0) { if (damageSpillover) { const totalRawDamage = damage * successfulHits; simState.log += `  -> Landing ${successfulHits} hits with spillover...\n`; const { finalDamage, shipsLost } = targetFleet.takeDamage(totalRawDamage); simState.log += `  -> ${targetFleet.name} takes a total of ${finalDamage} damage (raw: ${totalRawDamage}).\n`; if (shipsLost > 0) simState.log += `    -> ${targetFleet.name} lost ${shipsLost} ship(s)!\n`; } else { simState.log += `  -> Landing ${successfulHits} hits without spillover...\n`; for(let i=0; i < successfulHits; i++) { if(targetFleet.isDestroyed()) { simState.log += `  -> Target fleet destroyed, remaining hits are wasted.\n`; break; } const { finalDamage, shipsLost } = targetFleet.takeDamage(damage); simState.log += `  -> Hit #${i+1} deals ${finalDamage} damage (raw: ${damage}).\n`; if (shipsLost > 0) simState.log += `    -> ${targetFleet.name} lost ${shipsLost} ship(s)!\n`; } } } else { simState.log += `  -> All hits were avoided!\n`; }
+                } else { simState.log += `Ability #${index + 1} had no valid targets.\n`; }
+            });
+            simState.midTurnAbilityUsed = true;
             updateUI();
             checkBattleEnd();
         }
 
-        function checkBattleEnd() {
-            const teamASurvived = simState.teamA.some(f => !f.isDestroyed());
-            const teamBSurvived = simState.teamB.some(f => !f.isDestroyed());
+        function skipMidTurn() {
+             if (!simState.battleInProgress || simState.phase !== 'MID_TURN_ACTION') return;
+            simState.log += `\nEnd of Turn ${simState.turn} Mid-Turn Phase.\n`;
+            simState.turn++; simState.phase = 'TURN_ACTION'; updateUI(); checkBattleEnd();
+        }
 
+        function checkBattleEnd() {
+            const teamASurvived = simState.teamA.some(f => !f.isDestroyed()); const teamBSurvived = simState.teamB.some(f => !f.isDestroyed());
             if (!teamASurvived || !teamBSurvived) {
-                simState.battleInProgress = false;
-                simState.log += "\n--- Battle End ---\n";
-                let winnerName = "Neither (Mutual Destruction)";
-                if (teamASurvived && !teamBSurvived) winnerName = "Team A";
-                else if (!teamASurvived && teamBSurvived) winnerName = "Team B";
-                
-                simState.log += `Winner: ${winnerName}\n\n`;
-                simState.log += `Final Status:\n`;
-                simState.log += `Team A: ${simState.teamA.map(g => `${g.name} (${g.currentCount}/${g.maxCount})`).join(', ')}\n`;
-                simState.log += `Team B: ${simState.teamB.map(g => `${g.name} (${g.currentCount}/${g.maxCount})`).join(', ')}\n`;
+                simState.battleInProgress = false; simState.log += "\n--- Battle End ---\n"; let winnerName = "Neither (Mutual Destruction)"; if (teamASurvived && !teamBSurvived) winnerName = "Team A"; else if (!teamASurvived && teamBSurvived) winnerName = "Team B";
+                simState.log += `Winner: ${winnerName}\n\n`; simState.log += `Final Status:\n`; simState.log += `Team A: ${simState.teamA.map(g => `${g.name} (${g.currentCount}/${g.maxCount})`).join(', ')}\n`; simState.log += `Team B: ${simState.teamB.map(g => `${g.name} (${g.currentCount}/${g.maxCount})`).join(', ')}\n`;
                 updateUI();
             }
         }
 
         function updateUI() {
-            document.getElementById('battle-log').textContent = simState.log;
-            document.getElementById('battle-log').scrollTop = document.getElementById('battle-log').scrollHeight;
-
-            if (simState.battleInProgress) {
-                document.getElementById('start-battle-button').classList.add('hidden');
-                document.getElementById('next-turn-button').classList.remove('hidden');
+            document.getElementById('battle-log').textContent = simState.log; document.getElementById('battle-log').scrollTop = document.getElementById('battle-log').scrollHeight;
+            const startBtn = document.getElementById('start-battle-button'); const nextTurnBtn = document.getElementById('next-turn-button'); const midTurnBtn = document.getElementById('mid-turn-ability-button'); const skipMidTurnBtn = document.getElementById('skip-mid-turn-button'); const changeStatsBtn = document.getElementById('change-stats-button'); const resetBtn = document.getElementById('reset-battle-button'); const midTurnControls = document.getElementById('mid-turn-controls');
+            startBtn.classList.add('hidden'); nextTurnBtn.classList.add('hidden'); midTurnBtn.classList.add('hidden'); skipMidTurnBtn.classList.add('hidden'); changeStatsBtn.classList.add('hidden'); resetBtn.classList.add('hidden'); midTurnControls.classList.add('hidden');
+            if (!simState.battleInProgress) {
+                startBtn.classList.remove('hidden');
             } else {
-                document.getElementById('start-battle-button').classList.remove('hidden');
-                document.getElementById('next-turn-button').classList.add('hidden');
+                resetBtn.classList.remove('hidden');
+                if(simState.phase === 'TURN_ACTION') {
+                    nextTurnBtn.classList.remove('hidden');
+                } else if (simState.phase === 'MID_TURN_ACTION') {
+                    skipMidTurnBtn.classList.remove('hidden'); changeStatsBtn.classList.remove('hidden'); midTurnControls.classList.remove('hidden');
+                    if (!simState.midTurnAbilityUsed) {
+                        midTurnBtn.classList.remove('hidden');
+                    }
+                    const abilitiesContainer = document.getElementById('mid-turn-abilities-container');
+                    if(abilitiesContainer.children.length === 0) { addMidTurnAbilityRow(); }
+                }
             }
         }
 
-        // --- UI Interaction Logic ---
-        
+        // --- UI Interaction & Modal Logic ---
         let shipGroupCounter = 0;
-        function addShipGroup(team) {
-            shipGroupCounter++;
-            const container = document.getElementById(`team-${team.toLowerCase()}-fleets`);
-            const card = document.createElement('div');
-            card.className = 'ship-group-card bg-gray-700 p-4 rounded-lg relative';
-            card.dataset.team = team;
-            card.innerHTML = `
-                <button class="absolute top-2 right-2 text-gray-400 hover:text-white" onclick="this.parentElement.remove()">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                </button>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <input type="text" placeholder="Ship Type" value="" class="name bg-gray-600 border border-gray-500 rounded p-2 text-white placeholder-gray-400 col-span-2 sm:col-span-4">
-                    <input type="number" placeholder="Ship Count" value="" class="count bg-gray-600 border border-gray-500 rounded p-2 text-white">
-                    <input type="number" placeholder="HP (per ship)" value="" class="hp bg-gray-600 border border-gray-500 rounded p-2 text-white">
-                    <input type="number" placeholder="Firepower" value="" class="fp bg-gray-600 border border-gray-500 rounded p-2 text-white">
-                    <input type="number" placeholder="# of Rolls" value="" class="rolls bg-gray-600 border border-gray-500 rounded p-2 text-white">
-                    <input type="number" placeholder="Roll Addon" value="" class="roll-addon bg-gray-600 border border-gray-500 rounded p-2 text-white">
-                    <input type="number" placeholder="Roll Multiplier (e.g., 2)" value="" class="roll-multiplier bg-gray-600 border border-gray-500 rounded p-2 text-white">
-                    <input type="number" placeholder="Mitigation %" value="" class="mitigation bg-gray-600 border border-gray-500 rounded p-2 text-white">
-                    <input type="number" placeholder="Evasion %" value="" class="evasion bg-gray-600 border border-gray-500 rounded p-2 text-white">
-                    <input type="number" placeholder="Guaranteed Dodges" value="" class="dodges bg-gray-600 border border-gray-500 rounded p-2 text-white">
-                    <input type="number" placeholder="Special Damage" value="" class="special-damage bg-gray-600 border border-gray-500 rounded p-2 text-white">
-                </div>
-            `;
-            container.appendChild(card);
+        function addShipGroup(team) { shipGroupCounter++; const container = document.getElementById(`team-${team.toLowerCase()}-fleets`); const card = document.createElement('div'); card.className = 'ship-group-card bg-gray-700 p-4 rounded-lg relative'; card.dataset.team = team; card.innerHTML = ` <button class="absolute top-2 right-2 text-gray-400 hover:text-white" onclick="this.parentElement.remove()"> <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg> </button> <div class="grid grid-cols-2 sm:grid-cols-4 gap-4"> <input type="text" placeholder="Ship Type" value="" class="name bg-gray-600 border border-gray-500 rounded p-2 text-white placeholder-gray-400 col-span-2 sm:col-span-4"> <input type="number" placeholder="Ship Count" value="" class="count bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="HP (per ship)" value="" class="hp bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Firepower" value="" class="fp bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="# of Rolls" value="" class="rolls bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Roll Addon" value="" class="roll-addon bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Roll Multiplier" value="" class="roll-multiplier bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Mitigation %" value="" class="mitigation bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Evasion %" value="" class="evasion bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Guaranteed Dodges" value="" class="dodges bg-gray-600 border border-gray-500 rounded p-2 text-white col-span-2"> <div class="col-span-2 sm:col-span-4 border-t border-gray-600 pt-4 mt-2"> <p class="text-sm text-gray-400 mb-2">Pre-Battle / Special Ability</p> <div class="grid grid-cols-2 sm:grid-cols-4 gap-4"> <input type="number" placeholder="Special Damage" value="" class="special-damage bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Ships Hit" value="" class="ships-hit bg-gray-600 border border-gray-500 rounded p-2 text-white"> <select class="undodgeable bg-gray-600 border border-gray-500 rounded p-2 text-white"> <option>Undodgeable: No</option> <option>Undodgeable: Yes</option> </select> <select class="spillover bg-gray-600 border border-gray-500 rounded p-2 text-white"> <option>Spillover: No</option> <option>Spillover: Yes</option> </select> </div> </div> </div> `; container.appendChild(card); }
+        function addMidTurnAbilityRow() {
+            const container = document.getElementById('mid-turn-abilities-container');
+            const row = document.createElement('div');
+            row.className = 'ability-row bg-gray-700 p-3 rounded-lg flex items-center space-x-2 flex-wrap';
+            row.innerHTML = ` <select class="mid-turn-attacker bg-gray-600 border border-gray-500 rounded p-2 text-white flex-grow"> <option value="A">Team A Attacks</option> <option value="B">Team B Attacks</option> </select> <input type="number" placeholder="Damage" class="mid-turn-damage-input bg-gray-600 border border-gray-500 rounded p-2 text-white w-24"> <input type="number" placeholder="Ships Hit" class="mid-turn-ships-hit-input bg-gray-600 border border-gray-500 rounded p-2 text-white w-24"> <select class="mid-turn-undodgeable-input bg-gray-600 border border-gray-500 rounded p-2 text-white"> <option>Undodgeable: No</option> <option>Undodgeable: Yes</option> </select> <select class="mid-turn-spillover-input bg-gray-600 border border-gray-500 rounded p-2 text-white"> <option>Spillover: No</option> <option>Spillover: Yes</option> </select> <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-300 font-bold p-2">✕</button> `;
+            container.appendChild(row);
+        }
+
+        function openChangeStatsModal() {
+            const container = document.getElementById('edit-stats-container');
+            container.innerHTML = '';
+            const createEditCard = (shipGroup, team, index) => {
+                const card = document.createElement('div'); card.className = 'bg-gray-700 p-4 rounded-lg'; card.dataset.team = team; card.dataset.index = index;
+                card.innerHTML = ` <h3 class="text-lg font-semibold mb-2 ${team === 'A' ? 'text-green-400' : 'text-red-400'}">${shipGroup.name}</h3> <div class="grid grid-cols-2 sm:grid-cols-4 gap-4"> <input type="number" placeholder="Ship Count" value="${shipGroup.currentCount}" class="count bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="HP (per ship)" value="${shipGroup.individualHp}" class="hp bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Firepower" value="${shipGroup.fp}" class="fp bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="# of Rolls" value="${shipGroup.numRolls}" class="rolls bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Mitigation %" value="${shipGroup.damageMitigation * 100}" class="mitigation bg-gray-600 border border-gray-500 rounded p-2 text-white"> <input type="number" placeholder="Evasion %" value="${shipGroup.evasion * 100}" class="evasion bg-gray-600 border border-gray-500 rounded p-2 text-white"> </div> `;
+                container.appendChild(card);
+            };
+            simState.teamA.forEach((sg, i) => createEditCard(sg, 'A', i));
+            simState.teamB.forEach((sg, i) => createEditCard(sg, 'B', i));
+            document.getElementById('edit-stats-modal').classList.remove('hidden');
+        }
+        function closeChangeStatsModal() { document.getElementById('edit-stats-modal').classList.add('hidden'); }
+        
+        function saveShipStats() {
+            document.querySelectorAll('#edit-stats-container > div').forEach(card => {
+                const team = card.dataset.team;
+                const index = parseInt(card.dataset.index);
+                const shipGroup = (team === 'A') ? simState.teamA[index] : simState.teamB[index];
+                if(shipGroup) {
+                    const newCount = parseInt(card.querySelector('.count').value) || 0;
+                    shipGroup.currentCount = newCount; shipGroup.maxCount = newCount; 
+                    // Recalculate dodge pool based on new count and existing per-ship dodges
+                    shipGroup.dodgePool = newCount * shipGroup.guaranteedDodgesPerShip;
+                    shipGroup.individualHp = parseInt(card.querySelector('.hp').value) || 0;
+                    shipGroup.fp = parseInt(card.querySelector('.fp').value) || 0;
+                    shipGroup.numRolls = parseInt(card.querySelector('.rolls').value) || 0;
+                    shipGroup.damageMitigation = (parseInt(card.querySelector('.mitigation').value) || 0) / 100;
+                    shipGroup.evasion = (parseInt(card.querySelector('.evasion').value) || 0) / 100;
+                }
+            });
+            simState.log += "\n--- Player has manually changed ship stats. ---\n";
+            simState.log += `Team A: ${simState.teamA.map(f => f.toString()).join(", ")}\n`;
+            simState.log += `Team B: ${simState.teamB.map(f => f.toString()).join(", ")}\n`;
+            updateUI(); checkBattleEnd(); closeChangeStatsModal();
+        }
+
+        function openResetModal() { document.getElementById('reset-confirm-modal').classList.remove('hidden'); }
+        function closeResetModal() { document.getElementById('reset-confirm-modal').classList.add('hidden'); }
+        function resetBattle() {
+            simState.battleInProgress = false; simState.phase = 'SETUP'; simState.log = 'Battle has been reset. You can start a new simulation.';
+            document.getElementById('mid-turn-abilities-container').innerHTML = ''; // Clear mid-turn abilities
+            closeResetModal(); updateUI();
         }
 
         document.getElementById('start-battle-button').addEventListener('click', startBattle);
         document.getElementById('next-turn-button').addEventListener('click', runNextTurn);
+        document.getElementById('mid-turn-ability-button').addEventListener('click', useMidTurnAbilities);
+        document.getElementById('skip-mid-turn-button').addEventListener('click', skipMidTurn);
+        document.getElementById('change-stats-button').addEventListener('click', openChangeStatsModal);
+        document.getElementById('reset-battle-button').addEventListener('click', openResetModal);
 
-        window.onload = () => {
-            addShipGroup('A');
-            addShipGroup('B');
-        };
+        window.onload = () => { addShipGroup('A'); addShipGroup('B'); };
 
+        // --- Redacted Functions for Brevity ---
+        firePreBattleAbilities = (attackers, defenders, logPrefix) => { let abilityUsed = false; attackers.forEach(attacker => { if (attacker.specialDamage <= 0 || attacker.isDestroyed()) return; let availableTargets = defenders.filter(f => !f.isDestroyed()); if (availableTargets.length === 0) return; const targetFleet = availableTargets[Math.floor(Math.random() * availableTargets.length)]; simState.log += `${logPrefix} ${attacker.name} uses its special ability on ${targetFleet.name}!\n`; abilityUsed = true; let successfulHits = 0; const numHits = Math.min(attacker.shipsHit, targetFleet.currentCount + 1); for (let i = 0; i < numHits; i++) { let hitSuccess = true; if (!attacker.isUndodgeable) { if (targetFleet.dodgePool > 0) { targetFleet.dodgePool--; simState.log += `  -> A hit was negated by a guaranteed dodge! (${targetFleet.dodgePool} remaining in pool)\n`; hitSuccess = false; } else if (Math.random() < targetFleet.evasion) { simState.log += `  -> A hit was evaded!\n`; hitSuccess = false; } } if(hitSuccess) successfulHits++; } if (successfulHits === 0) { simState.log += `  -> All hits were avoided!\n`; return; } if (attacker.damageSpillover) { const totalRawDamage = attacker.specialDamage * successfulHits; simState.log += `  -> Landing ${successfulHits} hits with spillover...\n`; const { finalDamage, shipsLost } = targetFleet.takeDamage(totalRawDamage); simState.log += `  -> ${targetFleet.name} takes a total of ${finalDamage} damage (raw: ${totalRawDamage}).\n`; if (shipsLost > 0) simState.log += `    -> ${targetFleet.name} lost ${shipsLost} ship(s)!\n`; } else { simState.log += `  -> Landing ${successfulHits} hits without spillover...\n`; for(let i=0; i < successfulHits; i++) { if(targetFleet.isDestroyed()) { simState.log += `  -> Target fleet destroyed, remaining hits are wasted.\n`; break; } const { finalDamage, shipsLost } = targetFleet.takeDamage(attacker.specialDamage); simState.log += `  -> Hit #${i+1} deals ${finalDamage} damage (raw: ${attacker.specialDamage}).\n`; if (shipsLost > 0) simState.log += `    -> ${targetFleet.name} lost ${shipsLost} ship(s)!\n`; } } }); return abilityUsed; };
     </script>
 </body>
 </html>
