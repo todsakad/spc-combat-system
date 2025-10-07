@@ -36,7 +36,7 @@
     <div class="max-w-7xl mx-auto">
         <header class="text-center mb-8">
             <h1 class="text-3xl sm:text-4xl font-bold text-cyan-400">SPC Combat Calculator</h1>
-            <p class="text-gray-400 mt-2">this calculates stuff for the gms because the system is so shit its too tiresome to do it by hand</p>
+            <p class="text-gray-400 mt-2">this calculates stuff for the gms because the system is so shit its too tiresome to do it by hand.</p>
         </header>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
@@ -140,32 +140,26 @@
             }
             isDestroyed() { return this.currentCount <= 0; }
             
-            // CORRECTED takeDamage function
             takeDamage(rawDamage, spillover = true) {
                 const mitigatedDamage = rawDamage * (1 - this.damageMitigation);
                 const finalDamage = Math.ceil(mitigatedDamage > 0 ? mitigatedDamage : 0);
-                
                 this.damageOnCurrentShip += finalDamage;
                 let shipsLost = 0;
-
                 if (this.individualHp > 0) {
                     if (spillover) {
-                        // Original logic for spillover attacks (standard combat, certain abilities)
                         shipsLost = Math.floor(this.damageOnCurrentShip / this.individualHp);
                         if (shipsLost > 0) {
                             this.currentCount -= shipsLost;
-                            this.damageOnCurrentShip %= this.individualHp; // Remainder carries over
+                            this.damageOnCurrentShip %= this.individualHp; 
                         }
                     } else {
-                        // New logic for NO spillover. Destroys at most 1 ship.
                         if (this.damageOnCurrentShip >= this.individualHp) {
                             shipsLost = 1;
                             this.currentCount -= 1;
-                            this.damageOnCurrentShip = 0; // Overkill damage is lost
+                            this.damageOnCurrentShip = 0; 
                         }
                     }
                 }
-
                 if (this.currentCount < 0) this.currentCount = 0;
                 return { finalDamage, shipsLost };
             }
@@ -190,16 +184,78 @@
         }
 
         function runNextTurn() {
-            if (!simState.battleInProgress || simState.phase !== 'TURN_ACTION') return; simState.log += `\n--- Turn ${simState.turn} Standard Combat ---\n`; simState.teamA.forEach(group => group.damageThisTurn = 0); simState.teamB.forEach(group => group.damageThisTurn = 0);
+            if (!simState.battleInProgress || simState.phase !== 'TURN_ACTION') return; 
+            simState.log += `\n--- Turn ${simState.turn} Standard Combat ---\n`; 
+            simState.teamA.forEach(group => group.damageThisTurn = 0); 
+            simState.teamB.forEach(group => group.damageThisTurn = 0);
+            
             const calculateAttacks = (attackers, defenders, teamName) => {
                 simState.log += `\n${teamName} is calculating attacks:\n`;
-                attackers.forEach(attackerGroup => { if (attackerGroup.isDestroyed()) return; for (let ship = 0; ship < attackerGroup.currentCount; ship++) { for (let roll = 0; roll < attackerGroup.numRolls; roll++) { let currentTargets = defenders.filter(f => !f.isDestroyed()); if (currentTargets.length === 0) continue; const target = currentTargets[Math.floor(Math.random() * currentTargets.length)]; if (target.dodgePool > 0) { target.dodgePool--; simState.log += `  ${attackerGroup.name}'s attack on ${target.name} is negated by a guaranteed dodge. (${target.dodgePool} remaining in pool)\n`; continue; } if (Math.random() < target.evasion) { simState.log += `  ${attackerGroup.name}'s attack on ${target.name} was evaded!\n`; continue; } const minRoll = 5; let initialRoll = (attackerGroup.fp < minRoll) ? attackerGroup.fp : Math.floor(Math.random() * (attackerGroup.fp - minRoll + 1)) + minRoll; let rollWithAddon = initialRoll + attackerGroup.rollAddon; let rawDamage = Math.ceil(rollWithAddon * attackerGroup.rollMultiplier); if (rawDamage < 0) rawDamage = 0; target.damageThisTurn += rawDamage; simState.log += `  ${attackerGroup.name} targets ${target.name} for ${rawDamage} raw damage.\n`; } } });
+
+                // NEW: Create a weighted pool of all individual ships to target.
+                const targetPool = [];
+                defenders.forEach(group => {
+                    if (!group.isDestroyed()) {
+                        for (let i = 0; i < group.currentCount; i++) {
+                            targetPool.push(group);
+                        }
+                    }
+                });
+
+                attackers.forEach(attackerGroup => { 
+                    if (attackerGroup.isDestroyed()) return; 
+                    for (let ship = 0; ship < attackerGroup.currentCount; ship++) { 
+                        for (let roll = 0; roll < attackerGroup.numRolls; roll++) { 
+                            if (targetPool.length === 0) continue; 
+                            
+                            // NEW: Pick a target from the weighted pool.
+                            const target = targetPool[Math.floor(Math.random() * targetPool.length)]; 
+                            
+                            if (target.dodgePool > 0) { 
+                                target.dodgePool--; 
+                                simState.log += `  ${attackerGroup.name}'s attack on ${target.name} is negated by a guaranteed dodge. (${target.dodgePool} remaining in pool)\n`; 
+                                continue; 
+                            } 
+                            if (Math.random() < target.evasion) { 
+                                simState.log += `  ${attackerGroup.name}'s attack on ${target.name} was evaded!\n`; 
+                                continue; 
+                            } 
+                            const minRoll = 5; 
+                            let initialRoll = (attackerGroup.fp < minRoll) ? attackerGroup.fp : Math.floor(Math.random() * (attackerGroup.fp - minRoll + 1)) + minRoll; 
+                            let rollWithAddon = initialRoll + attackerGroup.rollAddon; 
+                            let rawDamage = Math.ceil(rollWithAddon * attackerGroup.rollMultiplier); 
+                            if (rawDamage < 0) rawDamage = 0; 
+                            target.damageThisTurn += rawDamage; 
+                            simState.log += `  ${attackerGroup.name} targets ${target.name} for ${rawDamage} raw damage.\n`; 
+                        } 
+                    } 
+                });
             };
-            calculateAttacks(simState.teamA, simState.teamB, 'Team A'); calculateAttacks(simState.teamB, simState.teamA, 'Team B');
-            simState.log += "\n--- Damage Resolution ---\n"; let damageWasDealtThisTurn = false; const applyDamage = (team) => { team.forEach(group => { if (group.damageThisTurn > 0) { damageWasDealtThisTurn = true; const { finalDamage, shipsLost } = group.takeDamage(group.damageThisTurn, true); simState.log += `${group.name} takes a total of ${finalDamage} damage (from ${group.damageThisTurn} raw damage).\n`; if (shipsLost > 0) simState.log += `  -> ${group.name} lost ${shipsLost} ship(s)!\n`; } }); };
-            applyDamage(simState.teamA); applyDamage(simState.teamB); if (!damageWasDealtThisTurn) simState.log += "No damage was dealt this turn.\n";
-            simState.log += "\nEnd of Standard Combat:\n"; simState.log += `Team A: ${simState.teamA.map(f => f.toString()).join(", ")}\n`; simState.log += `Team B: ${simState.teamB.map(f => f.toString()).join(", ")}\n`;
-            simState.phase = 'MID_TURN_ACTION'; simState.midTurnAbilityUsed = false; updateUI(); checkBattleEnd();
+            calculateAttacks(simState.teamA, simState.teamB, 'Team A'); 
+            calculateAttacks(simState.teamB, simState.teamA, 'Team B');
+            
+            simState.log += "\n--- Damage Resolution ---\n"; 
+            let damageWasDealtThisTurn = false; 
+            const applyDamage = (team) => { 
+                team.forEach(group => { 
+                    if (group.damageThisTurn > 0) { 
+                        damageWasDealtThisTurn = true; 
+                        const { finalDamage, shipsLost } = group.takeDamage(group.damageThisTurn, true); 
+                        simState.log += `${group.name} takes a total of ${finalDamage} damage (from ${group.damageThisTurn} raw damage).\n`; 
+                        if (shipsLost > 0) simState.log += `  -> ${group.name} lost ${shipsLost} ship(s)!\n`; 
+                    } 
+                }); 
+            };
+            applyDamage(simState.teamA); applyDamage(simState.teamB); 
+            if (!damageWasDealtThisTurn) simState.log += "No damage was dealt this turn.\n";
+            
+            simState.log += "\nEnd of Standard Combat:\n"; 
+            simState.log += `Team A: ${simState.teamA.map(f => f.toString()).join(", ")}\n`; 
+            simState.log += `Team B: ${simState.teamB.map(f => f.toString()).join(", ")}\n`;
+            simState.phase = 'MID_TURN_ACTION'; 
+            simState.midTurnAbilityUsed = false; 
+            updateUI(); 
+            checkBattleEnd();
         }
 
         function useMidTurnAbilities() {
